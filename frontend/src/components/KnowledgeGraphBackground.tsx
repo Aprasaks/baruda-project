@@ -8,9 +8,10 @@ import * as d3 from "d3";
 // (1) D3.js의 노드 타입을 import
 import type { SimulationNodeDatum } from "d3";
 
-// (2) 'window' 오류 해결용 커스텀 훅 (그대로)
+// (2) 'window' 오류 해결용 커스텀 훅 (변경 없음)
 const useWindowSize = () => {
   const [size, setSize] = useState({ width: 0, height: 0 });
+
   useEffect(() => {
     const handleResize = () => {
       setSize({
@@ -22,26 +23,46 @@ const useWindowSize = () => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
   return size;
 };
 
-// (3) TypeScript용 커스텀 노드 타입 정의 (그대로)
+// (3) TypeScript용 커스텀 노드 타입 정의 (변경 없음)
 interface GraphNode extends SimulationNodeDatum {
   id: string;
 }
 
-// (4) 메인 컴포넌트
-const KnowledgeGraphBackground = () => {
+// (4) 컴포넌트가 받을 Props 타입 정의 (변경 없음)
+interface KnowledgeGraphProps {
+  highlightNodes: string[];
+}
+
+// (5) 메인 컴포넌트
+const KnowledgeGraphBackground: React.FC<KnowledgeGraphProps> = ({
+  highlightNodes,
+}) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { width, height } = useWindowSize();
 
-  // (★중요★) 시뮬레이션 객체와 노드 데이터를 ref로 관리
+  // (★핵심★) D3 데이터/시뮬레이션을 Ref에 저장하여 리렌더링 시에도 유지
   const simulationRef = useRef<d3.Simulation<GraphNode, undefined> | null>(
     null
   );
   const nodesRef = useRef<GraphNode[]>([]);
+  const linksRef = useRef<any[]>([]); // 링크 데이터도 Ref로 관리
 
-  // D3 시뮬레이션 설정 (초기화)
+  // (★핵심★) 하이라이트 목록을 Ref로 관리
+  // D3의 'ticked' 함수가 React의 state 변경을 감지하지 못하므로,
+  // Ref를 사용해 최신 prop 값을 'ticked' 함수가 읽을 수 있도록 연결
+  const highlightSetRef = useRef(new Set<string>());
+
+  // [!!!] 로직 1: 하이라이트 Prop이 변경되면 Ref만 업데이트
+  // 이 Effect는 시뮬레이션을 재시작하지 않습니다!
+  useEffect(() => {
+    highlightSetRef.current = new Set(highlightNodes);
+  }, [highlightNodes]);
+
+  // [!!!] 로직 2: D3 시뮬레이션 초기화 (width/height 변경 시에만 실행)
   useEffect(() => {
     if (!canvasRef.current || width === 0 || height === 0) {
       return;
@@ -50,35 +71,37 @@ const KnowledgeGraphBackground = () => {
     const context = canvas.getContext("2d");
     if (!context) return;
 
-    // 데이터 생성
+    // (★수정★) 노드와 링크를 한 번만 생성
     const nodeCount = 300;
     const linkCount = 500;
 
-    // (★수정★) 노드 데이터를 ref에 저장
     nodesRef.current = d3.range(nodeCount).map((i) => ({ id: `node-${i}` }));
 
-    const links = d3.range(linkCount).map(() => ({
+    linksRef.current = d3.range(linkCount).map(() => ({
       source: nodesRef.current[Math.floor(Math.random() * nodeCount)],
       target: nodesRef.current[Math.floor(Math.random() * nodeCount)],
     }));
 
     // 시뮬레이션 설정
     simulationRef.current = d3
-      .forceSimulation<GraphNode>(nodesRef.current) // (★수정★)
+      .forceSimulation<GraphNode>(nodesRef.current)
       .force("center", d3.forceCenter(width / 2, height / 2).strength(0.01))
       .force("charge", d3.forceManyBody().strength(-5))
       .force("collide", d3.forceCollide().radius(5))
-      .force("link", d3.forceLink(links).strength(0.01).distance(20));
+      .force(
+        "link",
+        d3.forceLink(linksRef.current).strength(0.01).distance(20)
+      );
 
     // 애니메이션 함수 (ticked)
     const ticked = () => {
       if (!context) return;
       context.clearRect(0, 0, width, height);
 
-      // 선 그리기
+      // 6-1. 선 그리기
       context.strokeStyle = "rgba(255, 255, 255, 0.1)";
       context.beginPath();
-      links.forEach((link) => {
+      linksRef.current.forEach((link) => {
         const sourceNode = link.source as GraphNode;
         const targetNode = link.target as GraphNode;
         if (sourceNode.x && sourceNode.y && targetNode.x && targetNode.y) {
@@ -88,13 +111,20 @@ const KnowledgeGraphBackground = () => {
       });
       context.stroke();
 
-      // 점 그리기
-      context.fillStyle = "rgba(255, 255, 255, 0.5)";
+      // 6-2. 점 그리기
       nodesRef.current.forEach((node) => {
-        // (★수정★)
         if (typeof node.x === "number" && typeof node.y === "number") {
+          // [!!!] (★핵심 수정★) State가 아닌 Ref에서 하이라이트 정보 읽기
+          const isHighlighted = highlightSetRef.current.has(node.id);
+
+          context.fillStyle = isHighlighted
+            ? "rgba(59, 130, 246, 1)" // 밝은 파랑
+            : "rgba(255, 255, 255, 0.5)"; // 기본 흰색
+
+          const radius = isHighlighted ? 4 : 2;
+
           context.beginPath();
-          context.arc(node.x, node.y, 2, 0, 2 * Math.PI);
+          context.arc(node.x, node.y, radius, 0, 2 * Math.PI);
           context.fill();
         }
       });
@@ -105,47 +135,44 @@ const KnowledgeGraphBackground = () => {
     return () => {
       simulationRef.current?.stop();
     };
+
+    // (★핵심 수정★) 이 Effect는 오직 width/height 변경 시에만 재실행
   }, [width, height]);
 
-  // (5) [!!!] 마우스 인터랙션 로직 (★완전히 수정됨★)
+  // [!!!] 로직 3: 마우스 인터랙션 (수정된 '툭 치기' 방식)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const mouseMoveHandler = (event: MouseEvent) => {
       const [x, y] = d3.pointer(event, canvas);
-      const radius = 60; // 마우스 영향 반경 (조절 가능)
-      const strength = 0.5; // '툭 치는' 힘 (조절 가능)
+      const radius = 60;
+      const strength = 0.5;
 
-      // ref에 저장된 노드들에 직접 접근
       nodesRef.current.forEach((node) => {
         if (node.x && node.y) {
           const dx = node.x - x;
           const dy = node.y - y;
           const dist = Math.sqrt(dx * dx + dy * dy);
 
-          // 마우스 반경 안에 있다면
           if (dist < radius) {
-            // (★핵심★) '힘(force)' 대신 '속도(velocity)'를 직접 건드림
-            // '툭' 쳐서 밀려나게 합니다.
             node.vx = (node.vx || 0) + (dx / dist) * strength;
             node.vy = (node.vy || 0) + (dy / dist) * strength;
           }
         }
       });
 
-      // 시뮬레이션에 '노드 위치가 바뀌었으니 다시 활성화해!'라고 알림
       simulationRef.current?.alpha(0.3).restart();
     };
 
-    // (★수정★) 마우스가 떠났을 때의 핸들러가 더 이상 필요 없습니다.
-    // '툭' 치는 것은 일시적이라, 마우스가 떠나면 자동으로 멈춥니다.
     canvas.addEventListener("mousemove", mouseMoveHandler);
 
     return () => {
       canvas.removeEventListener("mousemove", mouseMoveHandler);
     };
-  }, []); // (★수정★) 이 effect는 width/height와 무관하게 한 번만 실행
+
+    // (★수정★) 이 Effect는 컴포넌트 마운트 시 한 번만 실행
+  }, []);
 
   // (6) 렌더링 JSX (그대로)
   return (

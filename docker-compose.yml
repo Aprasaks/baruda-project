@@ -1,0 +1,36 @@
+# docker-compose.yml
+
+version: "3.8"
+
+services:
+  # 1. FastAPI 백엔드 서비스 (RAG 로직 실행)
+  backend:
+    build:
+      context: ./backend # backend 폴더의 Dockerfile을 사용해 이미지를 빌드
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000" # 로컬 포트 8000번을 컨테이너 포트 8000번과 연결
+    volumes:
+      - ./docs:/app/docs # [!!! 핵심 RAG 설정 !!!]
+      # 로컬 docs 폴더를 컨테이너 내부의 /app/docs로 마운트하여
+      # FastAPI 앱이 지식 문서를 읽을 수 있게 함
+    environment:
+      - OLLAMA_HOST=http://ollama:11434 # Ollama 서비스의 주소를 환경 변수로 설정
+    depends_on:
+      - ollama # Ollama 서비스가 먼저 시작된 후에 backend가 시작되도록 보장
+
+  # 2. Ollama LLM 서비스 (언어 모델 실행)
+  ollama:
+    # 공식 Ollama 이미지를 사용
+    image: ollama/ollama
+    ports:
+      - "11434:11434" # 로컬 포트 11434번을 Ollama 포트와 연결
+    volumes:
+      - ollama_data:/root/.ollama # 모델 데이터를 저장할 볼륨 마운트
+
+    # [!!! LLM 모델 자동 다운로드 및 실행 설정 (선택 사항이나 매우 유용) !!!]
+    # 프로젝트 시작 시 자동으로 'llama2' 모델을 다운로드하고 실행
+    command: ["-d", "llama2"]
+
+volumes:
+  ollama_data: # Ollama 모델 파일이 저장될 Docker 볼륨 정의

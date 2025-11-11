@@ -2,3 +2,6 @@
 
 fastapi
 uvicorn[standard]
+langchain
+langchain-community   # <-- [!!!] 이 줄을 추가해주세요 [!!!]
+unstructured[md]

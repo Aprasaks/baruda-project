@@ -23,8 +23,6 @@ export default function Home() {
     e.preventDefault(); // 폼 제출 시 기본 동작인 페이지 새로고침 방지
     if (!query || isLoading) return; // 검색어가 없거나 로딩 중이면 실행 방지
 
-    console.log("검색 시작:", query); // (디버깅용)
-
     setIsLoading(true);
     setResult(null);
     setHighlightNodes([]); // 이전 하이라이트 초기화
@@ -33,8 +31,6 @@ export default function Home() {
     // 2초간 '생각하는 시간'을 줍니다.
     await new Promise((resolve) => setTimeout(resolve, 2000));
     // ---------------------------------
-
-    console.log("2초 대기 완료, 가짜 응답 생성"); // (디버깅용)
 
     // (가짜 응답) 300개의 노드 ID 중에서 랜덤으로 몇 개를 골라 출처라고 가정합니다.
     const fakeSources = [
@@ -56,8 +52,6 @@ export default function Home() {
     setResult(fakeResponse);
     setHighlightNodes(fakeResponse.sources); // (★핵심★) 이 ID들을 배경 컴포넌트로 전달!
     setIsLoading(false);
-
-    console.log("상태 업데이트 완료:", fakeResponse); // (디버깅용)
   };
 
   // 3. 렌더링할 JSX
@@ -65,7 +59,7 @@ export default function Home() {
     // overflow-hidden: 배경 애니메이션이 화면 밖으로 삐져나가지 않도록
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-6">
       {/* Layer 3: 지식 그래프 배경 */}
-      {/* highlightNodes 상태를 prop으로 전달 */}
+      {/* (★수정★) highlightNodes 상태를 prop으로 전달 */}
       <KnowledgeGraphBackground highlightNodes={highlightNodes} />
 
       {/* Layer 2: 중앙 UI 영역 */}
@@ -75,7 +69,7 @@ export default function Home() {
           무한의 지식 서고에서 답을 탐색하세요.
         </p>
 
-        {/* 검색 폼 */}
+        {/* (★수정★) 폼으로 감싸고 onSubmit 연결 */}
         <form onSubmit={handleSearch}>
           <input
             type="text"
@@ -91,7 +85,7 @@ export default function Home() {
           />
         </form>
 
-        {/* 결과 표시 영역 */}
+        {/* (★새로 추가★) 결과 표시 영역 */}
         {/* 최소 높이를 지정해 로딩/결과에 따라 UI가 덜컹거리는 것을 방지 */}
         <div className="mt-6 min-h-[150px]">
           {isLoading && (

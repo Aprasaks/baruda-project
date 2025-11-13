@@ -5,4 +5,6 @@ uvicorn[standard]
 langchain
 langchain-community
 unstructured[md]
-langchain-text-splitters   # <-- [!!!] 이 줄을 추가해주세요 [!!!]
+langchain-text-splitters
+chromadb                   # <-- [!!!] 벡터 데이터베이스 (저장소)
+langchain-ollama           # <-- [!!!] Ollama를 임베딩 및 추론에 사용하기 위한 모듈
